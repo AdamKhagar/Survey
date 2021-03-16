@@ -8,35 +8,6 @@ class Survey(models.Model):
     title = models.CharField(max_length=100)
     date = models.DateTimeField()
 
-    def add_simple_question(self, question_text: str):
-        return QuestionTextAnswer.objects.create(
-            survey=self,
-            question_text=question_text
-        )
-    add_simple_question.short_description = 'Add Simple Text Question'
-
-    def add_question_choice(
-            self,
-            question_text: str,
-            choices: List[str],
-            choices_count: int = 1
-    ) -> 'QuestionChoiceAnswer':
-        if len(choices) > choices_count:
-            raise ValueError
-
-        question = QuestionChoiceAnswer.objects.create(
-            question_text=question_text,
-            survey=self,
-            choices_count=choices_count,
-        )
-        for choice in choices:
-            AnswerChoice.objects.create(
-                question=question,
-                answer_text=choice
-            )
-
-        return question
-    add_question_choice.boolean = True
 
 class QuestionBase(models.Model):
     """Базовый класс вопроса"""
@@ -80,6 +51,16 @@ class AnswerChoice(models.Model):
         on_delete=models.CASCADE,
     )
     answer_text = models.TextField()
+
+
+class QUESTION_TYPES:
+    TEXT_ANSWER = 'text'
+    CHOICE_ANSWER = 'choice'
+
+    CHOICES = (
+        (TEXT_ANSWER, QuestionTextAnswer),
+        (CHOICE_ANSWER, QuestionChoiceAnswer)
+    )
 
 
 class User(models.Model):
