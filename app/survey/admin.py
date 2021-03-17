@@ -49,3 +49,4 @@ class QuestionChoiceAnswer(admin.ModelAdmin):
 admin.site.register(models.QuestionChoiceAnswer, QuestionChoiceAnswer)
 
 admin.site.register(models.QuestionTextAnswer)
+admin.site.register(models.UserSurvey)

@@ -81,30 +81,31 @@ class UserSurvey(models.Model):
     )
 
 
-class UserAnswerBase(models.Model):
-    """Базовый класс ответа"""
+class UserAnswerText(models.Model):
+    """Текстовый ответ"""
     user_survey = models.ForeignKey(
         UserSurvey,
-        related_name='answers',
+        related_name='text_answers',
         on_delete=models.CASCADE
     )
-
-
-class UserAnswerText(UserAnswerBase):
-    """Текстовый ответ"""
     question = models.ForeignKey(
         QuestionTextAnswer,
-        related_name='users_answers',
+        related_name='users_text_answers',
         on_delete=models.CASCADE,
     )
     answer = models.TextField()
 
 
-class UserOneChoiceAnswer(UserAnswerBase):
+class UserChoiceAnswer(models.Model):
     """Ответ на вопрос вариантами ответа"""
+    user_survey = models.ForeignKey(
+        UserSurvey,
+        related_name='choice_answers',
+        on_delete=models.CASCADE
+    )
     question = models.ForeignKey(
         QuestionChoiceAnswer,
-        related_name='users_answers',
+        related_name='users_choice_answers',
         on_delete=models.CASCADE,
     )
     answer = models.ManyToManyField(AnswerChoice)
