@@ -6,7 +6,7 @@ from rest_framework.viewsets import GenericViewSet
 
 from survey import serializers
 from survey.models import Survey, User, UserSurvey
-from survey.services import get_survey, get_user_from_request
+from survey.services import get_survey, get_user_from_request, get_user, get_user_survey
 
 
 class SurveyView(GenericViewSet,
@@ -41,19 +41,20 @@ class SurveyView(GenericViewSet,
         return Response(status=status.HTTP_200_OK)
 
 
-class UserAuth(GenericViewSet,
-               mixins.CreateModelMixin):
+class UserDetailView(GenericViewSet,
+                     mixins.CreateModelMixin,
+                     mixins.RetrieveModelMixin):
     queryset = User.objects.all()
-    serializer_class = serializers.UserAuthSerializer
 
+    def get_serializer_class(self):
+        if self.action in ['create', 'retrieve']:
+            return serializers.UserDetailSerializer
+        elif self.action == 'survey_detail':
+            return serializers.UserSurveyDetailSerializer
 
-# class UserSurveyView(GenericViewSet):
-#     queryset = User.objects.all()
-#
-#     @action(methods=['get'], detail=True)
-#     def get_all_surveys(self, request, pk):
-#
-
-
-
-
+    @action(methods=['get'], detail=True, url_path='survey_detail/(?P<survey_pk>[^/.]+)', url_name='survey-details')
+    def survey_detail(self, request, pk=None, survey_pk=None):
+        user = get_user(pk)
+        survey = get_survey(survey_pk)
+        serializer = self.get_serializer(get_user_survey(user, survey))
+        return Response(serializer.data, status=status.HTTP_200_OK)

@@ -1,10 +1,7 @@
-from abc import ABC
-
-from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
-from survey.models import Survey, QUESTION_TYPES, UserSurvey, UserAnswerText, UserChoiceAnswer, QuestionTextAnswer, \
+from survey.models import Survey, UserSurvey, UserAnswerText, UserChoiceAnswer, QuestionTextAnswer, \
     QuestionChoiceAnswer, AnswerChoice
 
 from survey.models import User
@@ -49,6 +46,8 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
                 'question': question.question_text
             })
 
+        return questions
+
     class Meta:
         model = Survey
         fields = (
@@ -60,72 +59,13 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
         )
 
 
-class UserAuthSerializer(serializers.ModelSerializer):
+class QuestionTextAnswerSerializer(serializers.ModelSerializer):
     class Meta:
-        model = User
+        model = QuestionTextAnswer
         fields = '__all__'
 
 
-class AnswerSerializerBase(serializers.RelatedField, ABC):
-    def __init__(self, user_survey: UserSurvey, **kwargs):
-        self.user_survey = user_survey
-        super().__init__(**kwargs)
-
-
-# class TextAnswerSerializer(AnswerSerializerBase):
-#     queryset = UserAnswerText.objects.all()
-#
-#     def to_representation(self, value):
-#         return {
-#             "question_id": value.question.pk,
-#             "question": value.question.question_text,
-#             "answer_id": value.pk,
-#             "answer": value.answer,
-#         }
-#
-#     def to_internal_value(self, data):
-#         try:
-#             answer = UserAnswerText.objects.create(
-#                 user_survey=self.user_survey,
-#                 question=QuestionTextAnswer.objects.get(
-#                     pk=int(data['question_id'])
-#                 ),
-#                 answer=data['answer'],
-#             )
-#         except QuestionTextAnswer.DoesNotExist:
-#             raise ValidationError
-#         else:
-#             return answer
-#
-#
-# class ChoiceAnswerSerializer(AnswerSerializerBase):
-#     queryset = UserChoiceAnswer.objects.all()
-#
-#     def to_representation(self, value):
-#         return {
-#             "question_id": value.question.pk,
-#             "question": value.question.question_text,
-#             "answer_id": value.pk,
-#             "answer": value.answer
-#         }
-#s
-#     def to_internal_value(self, data):
-#         try:
-#             answer = UserChoiceAnswer.objects.create(
-#                 user_survey=self.user_survey,
-#                 question=QuestionChoiceAnswer.objects.get(
-#                     pk=int(data['question_id'])
-#                 ),
-#                 answer=AnswerChoice.objects.filter(
-#                     pk__in=data['answer']
-#                 )
-#             )
-#         except ObjectDoesNotExist:
-#             raise ValidationError()
-#         else:
-#             return answer
-
-class UserTextAnswerSerializer(serializers.ModelSerializer):
+class UserTextAnswerWriteSerializer(serializers.ModelSerializer):
     question = serializers.PrimaryKeyRelatedField(
         queryset=QuestionTextAnswer.objects.all()
     )
@@ -138,13 +78,39 @@ class UserTextAnswerSerializer(serializers.ModelSerializer):
         )
 
 
-class AnswerChoiceSerializer(serializers.ModelSerializer):
+class UserTextAnswerReadSerializer(serializers.ModelSerializer):
+    question = QuestionTextAnswerSerializer()
+
+    class Meta:
+        model = UserAnswerText
+        fields = (
+            'question',
+            'answer',
+        )
+
+
+class AnswerChoiceReadSerializer(serializers.ModelSerializer):
     class Meta:
         model = AnswerChoice
-        fields = '__all__'
+        fields = (
+            'id',
+            'answer_text'
+        )
 
 
-class UserChoiceAnswerSerializer(serializers.ModelSerializer):
+class QuestionChoiceAnswerReadSerializer(serializers.ModelSerializer):
+    choices = AnswerChoiceReadSerializer(many=True)
+
+    class Meta:
+        model = QuestionChoiceAnswer
+        fields = (
+            'id',
+            'question_text',
+            'choices',
+        )
+
+
+class UserChoiceAnswerWriteSerializer(serializers.ModelSerializer):
     question = serializers.PrimaryKeyRelatedField(
         queryset=QuestionChoiceAnswer.objects.all()
     )
@@ -167,41 +133,52 @@ class UserChoiceAnswerSerializer(serializers.ModelSerializer):
         )
 
 
+class UserChoiceAnswerReadSerializer(serializers.ModelSerializer):
+    question = QuestionChoiceAnswerReadSerializer()
+    answer = AnswerChoiceReadSerializer(many=True)
+
+    class Meta:
+        model = UserChoiceAnswer
+        fields = (
+            'question',
+            'answer',
+        )
+
+
 class UserSurveySerializer(serializers.ModelSerializer):
+    survey = serializers.PrimaryKeyRelatedField(read_only=True)
     user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
-    text_answers = UserTextAnswerSerializer(many=True)
-    choice_answers = UserChoiceAnswerSerializer(many=True)
+    text_answers = UserTextAnswerWriteSerializer(many=True)
+    choice_answers = UserChoiceAnswerWriteSerializer(many=True)
 
     class Meta:
         model = UserSurvey
         fields = (
+            'survey',
             'user',
             'choice_answers',
             'text_answers',
         )
 
     def update(self, instance, validated_data):
-        def validate_choice_answers(choice_answers, text_answers, instance):
-            all_answers_count = len(choice_answers) + len(text_answers)
-            total_question_count = len(instance.text_answers.all()) + len(instance.choice_answers.all())
+        def validate_choice_answers(choice_answers_, text_answers_, instance_):
+            all_answers_count = len(choice_answers_) + len(text_answers_)
+            total_question_count = len(instance_.text_answers.all()) + len(instance_.choice_answers.all())
 
             if all_answers_count < total_question_count:
-                error = "You didn't answer all the questions"
+                ValidationError("You didn't answer all the questions", 400)
             elif all_answers_count > total_question_count:
-                error = "Wrong data: too many answers"
+                ValidationError("Wrong data: too many answers", 400)
 
-            if error:
-                raise ValidationError(error, 400)
-
-        def validate_answers_or_raise_400(answers, question):
-            if len(answers) > question.choices_count:
+        def validate_answers_or_raise_400(answers_, question_):
+            if len(answers_) > question_.choices_count:
                 raise ValidationError(
-                    f'Too many choices for question {question}. Max count {question.choices_count}',
+                    f'Too many choices for question {question_}. Max count {question_.choices_count}',
                     400
                 )
 
-            for answer in answers:
-                if answer not in question.choices.all():
+            for answer in answers_:
+                if answer not in question_.choices.all():
                     raise ValidationError(
                         'The question does not have this option in the list of possible answers',
                         400
@@ -240,3 +217,41 @@ class UserSurveySerializer(serializers.ModelSerializer):
         return instance
 
 
+class UserSurveysListSerializer(serializers.ModelSerializer):
+    survey = serializers.HyperlinkedRelatedField(
+        read_only=True,
+        view_name='survey:surveys-detail'
+        # queryset=UserSurvey.objects.all()
+    )
+
+    class Meta:
+        model = UserSurvey
+        fields = (
+            'survey',
+        )
+
+
+class UserDetailSerializer(serializers.ModelSerializer):
+    surveys = UserSurveysListSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = User
+        fields = (
+            'id',
+            'email',
+            'surveys'
+        )
+
+
+class UserSurveyDetailSerializer(serializers.ModelSerializer):
+    survey = SurveyListSerializer(read_only=True)
+    text_answers = UserTextAnswerReadSerializer(many=True)
+    choice_answers = UserChoiceAnswerReadSerializer(many=True)
+
+    class Meta:
+        model = UserSurvey
+        fields = (
+            'survey',
+            'text_answers',
+            'choice_answers'
+        )

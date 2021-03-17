@@ -1,5 +1,3 @@
-from typing import List
-
 from django.db import models
 
 
@@ -7,6 +5,9 @@ class Survey(models.Model):
     """Опросник"""
     title = models.CharField(max_length=100)
     date = models.DateTimeField()
+
+    def __str__(self):
+        return f'{self.title}. Stated:{self.date}'
 
 
 class QuestionBase(models.Model):
@@ -51,16 +52,6 @@ class AnswerChoice(models.Model):
         on_delete=models.CASCADE,
     )
     answer_text = models.TextField()
-
-
-class QUESTION_TYPES:
-    TEXT_ANSWER = 'text'
-    CHOICE_ANSWER = 'choice'
-
-    CHOICES = (
-        (TEXT_ANSWER, QuestionTextAnswer),
-        (CHOICE_ANSWER, QuestionChoiceAnswer)
-    )
 
 
 class User(models.Model):
